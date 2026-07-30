@@ -687,23 +687,23 @@
 
     <div id="toastContainer" class="fixed top-4 left-1/2 transform -translate-x-1/2 z-[60] flex flex-col gap-2"></div>
 
-    <script>
-        function showToast(msg, type = 'success') {
-            const container = document.getElementById('toastContainer');
-            const toast = document.createElement('div');
-            const color = type === 'error' ? 'bg-red-800' : 'bg-slate-800';
-            toast.className = `${color} text-white px-5 py-3 rounded-lg shadow-xl flex items-center gap-2 opacity-0 transition-opacity duration-300 transform -translate-y-4 text-sm z-50`;
-            toast.innerHTML = msg;
-            container.appendChild(toast);
-            requestAnimationFrame(() => toast.classList.remove('opacity-0', '-translate-y-4'));
-            setTimeout(() => {
-                toast.classList.add('opacity-0', '-translate-y-4');
-                setTimeout(() => toast.remove(), 300);
-            }, 3000);
-        }
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 
-        // --- STEP 1. 시뮬레이터 변수 및 업데이트 함수 ---
-        const thicknessSlider = document.getElementById('thicknessSlider');
+        const firebaseConfig = {
+            apiKey: "AIzaSyCqnhntfRR1_HhB5HgjzyX9g9QkktDScZ4",
+            authDomain: "weather-satellite-radar-sim-2.firebaseapp.com",
+            projectId: "weather-satellite-radar-sim-2",
+            storageBucket: "weather-satellite-radar-sim-2.firebasestorage.app",
+            messagingSenderId: "1014516721304",
+            appId: "1:1014516721304:web:0e764b8439ea1919fa12ed"
+        };
+
+        const app = initializeApp(firebaseConfig);
+    </script>
+
+    <script>
+        // 공통 토스트 메시지
         const heightSlider = document.getElementById('heightSlider');
         const radarSlider = document.getElementById('radarSlider');
         let isNightMode = false;
