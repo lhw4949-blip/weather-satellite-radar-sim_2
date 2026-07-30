@@ -411,7 +411,7 @@
                             <div class="bg-slate-900 rounded-xl p-3 border border-slate-700 flex flex-col items-center">
                                 <div class="text-xs font-bold text-slate-200 mb-2">① 가시 영상</div>
                                 <div class="relative w-full aspect-square bg-slate-800 rounded-lg overflow-hidden border border-slate-700 flex items-center justify-center">
-                                    <img src="https://placehold.co/400x400/0f172a/e2e8f0?text=Visible+Image+(A,+B)" alt="가시 영상" class="w-full h-full object-cover" style="object-position: 0% 50%;">
+                                    <img src="visible.png" alt="가시 영상" class="w-full h-full object-cover" style="object-position: 0% 50%;">
                                 </div>
                                 <div class="mt-2 text-[11px] text-slate-300 text-center">
                                     A: 매우 밝음(두꺼움) <br> B: 다소 밝음/회색
@@ -422,7 +422,7 @@
                             <div class="bg-slate-900 rounded-xl p-3 border border-slate-700 flex flex-col items-center">
                                 <div class="text-xs font-bold text-slate-200 mb-2">② 적외 영상</div>
                                 <div class="relative w-full aspect-square bg-slate-800 rounded-lg overflow-hidden border border-slate-700 flex items-center justify-center">
-                                    <img src="https://placehold.co/400x400/0f172a/e2e8f0?text=Infrared+Image+(A,+B)" alt="적외 영상" class="w-full h-full object-cover" style="object-position: 50% 50%;">
+                                    <img src="infrared.png" alt="적외 영상" class="w-full h-full object-cover" style="object-position: 50% 50%;">
                                 </div>
                                 <div class="mt-2 text-[11px] text-slate-300 text-center">
                                     A: 매우 밝음(고도 높음)<br> B: 밝음(상층 권운 영역)
@@ -433,7 +433,7 @@
                             <div class="bg-slate-900 rounded-xl p-3 border border-slate-700 flex flex-col items-center">
                                 <div class="text-xs font-bold text-slate-200 mb-2">③ 레이더 영상</div>
                                 <div class="relative w-full aspect-square bg-slate-950 rounded-lg overflow-hidden border border-slate-700 flex items-center justify-center">
-                                    <img src="https://placehold.co/400x400/0f172a/e2e8f0?text=Radar+Echo" alt="레이더 영상" class="w-full h-full object-cover" style="object-position: 100% 50%;">
+                                    <img src="radar.png" alt="레이더 영상" class="w-full h-full object-cover" style="object-position: 100% 50%;">
                                 </div>
                                 <div class="mt-2 text-[11px] text-slate-300 text-center">
                                     A: 강한 강수 에코(노랑~빨강)<br> B: 강수 에코 없음
@@ -444,7 +444,7 @@
                             <div class="bg-amber-50/50 rounded-xl p-3 border border-amber-200 flex flex-col items-center">
                                 <div class="text-xs font-bold text-amber-900 mb-2">④ 지상 일기도 (09시)</div>
                                 <div class="relative w-full aspect-square bg-white rounded-lg overflow-hidden border border-slate-300 flex items-center justify-center p-1">
-                                    <img src="https://placehold.co/400x400/fef3c7/78350f?text=Weather+Map+(09h)" alt="지상 일기도" class="w-full h-full object-contain">
+                                    <img src="weather.png" alt="지상 일기도" class="w-full h-full object-contain">
                                 </div>
                                 <div class="mt-2 text-[11px] text-amber-900 text-center font-medium">
                                     한반도를 지나는 온대저기압과<br><strong class="text-blue-700">한랭 전선</strong> / <strong class="text-red-600">온난 전선</strong>
@@ -1101,16 +1101,68 @@
         };
         document.getElementById('cancelFeedbackBtn').addEventListener('click', closeFb);
 
-        document.getElementById('generateAiBtn').addEventListener('click', () => {
+        // 🌟 알려주신 curl 구조와 동일하게 Gemini AI API 호출 설정
+        const AI_API_KEY = "AQ.Ab8RN6KYCiYv-NIxvmGuTIEqnHljvEdpEE9uE8SuIEmlUMGiNw"; 
+
+        document.getElementById('generateAiBtn').addEventListener('click', async () => {
             const data = submissionsData.find(d => d.id === currentTargetId);
             const nameDisplay = `${data.studentNum || ''} ${data.studentName || ''}`.trim() || data.studentInfo;
             const btn = document.getElementById('generateAiBtn');
-            btn.innerHTML = '생성 중...'; btn.disabled = true;
-            setTimeout(() => {
-                document.getElementById('teacherFeedbackText').value = `[AI 추천 초안] ${nameDisplay} 학생, 가시·적외·레이더 영상의 각각의 탐구 질문에 구체적이고 논리적인 근거로 답변을 완성했습니다. 영상별 물리적 관측 차이를 명확히 파악하고 있어 우수합니다.`;
-                showToast('AI 피드백이 생성되었습니다.');
-                btn.innerHTML = 'AI 피드백 자동 생성'; btn.disabled = false;
-            }, 1000);
+            const feedbackTextarea = document.getElementById('teacherFeedbackText');
+            
+            // API 키가 입력되지 않은 경우 경고
+            if (!AI_API_KEY || AI_API_KEY.trim() === "") {
+                showToast('API 키가 설정되지 않았습니다. 소스 코드에 API 키를 입력해주세요.', 'error');
+                return;
+            }
+
+            btn.innerHTML = '⏳ AI 분석 및 생성 중...'; 
+            btn.disabled = true;
+
+            // AI에게 전달할 프롬프트(명령어) 구성
+            const prompt = `
+당신은 고등학교 지구과학 교사입니다. 학생이 '기상 위성 및 레이더 영상 종합 탐구' 시뮬레이션을 수행하고 아래와 같이 보고서를 제출했습니다.
+학생의 답변 내용을 논리적으로 분석하여, 칭찬할 점과 보완할 점이 담긴 학생 맞춤형 교사 피드백을 다정한 말투로 3~4문장으로 작성해주세요.
+
+[학생 정보] ${nameDisplay}
+[가시영상 답변] ${data.ansVis || '내용 없음'}
+[적외영상 답변] ${data.ansIr || '내용 없음'}
+[레이더영상 답변] ${data.ansRad || '내용 없음'}
+[원리 요약] ${data.observation1 || '내용 없음'}
+[최종 결론] ${data.conclusion || '내용 없음'}
+`;
+
+            try {
+                // curl 명령어와 동일한 POST 요청 및 헤더 설정
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-goog-api-key': AI_API_KEY 
+                    },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }]
+                    })
+                });
+
+                if (!response.ok) throw new Error(`AI API 호출 실패: ${response.status}`);
+                
+                const result = await response.json();
+                const aiResponseText = result.candidates[0].content.parts[0].text;
+                
+                // 생성된 피드백을 텍스트창에 입력
+                feedbackTextarea.value = aiResponseText.trim();
+                showToast('AI 피드백이 생성되었습니다. 내용을 검토 후 저장하세요.');
+                
+            } catch (error) {
+                console.error("AI 피드백 생성 오류:", error);
+                showToast('AI 피드백 생성 중 오류가 발생했습니다. 콘솔 창을 확인해주세요.', 'error');
+                feedbackTextarea.value = `[시스템 오류] AI 피드백을 불러오지 못했습니다.`;
+            } finally {
+                // 버튼 상태 원상 복구
+                btn.innerHTML = 'AI 피드백 자동 생성'; 
+                btn.disabled = false;
+            }
         });
 
         document.getElementById('saveFeedbackBtn').addEventListener('click', async () => {
