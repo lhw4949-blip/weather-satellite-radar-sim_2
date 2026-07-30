@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>구름 위성·레이더 영상 종합 탐구 시뮬레이터</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f8fafc;
+        }
+        
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 22px;
+            width: 22px;
+            border-radius: 50%;
+            background: #ffffff;
+            border: 3px solid #3b82f6;
+            cursor: pointer;
+            margin-top: -9px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            transition: transform 0.1s;
+        }
+        input[type=range]::-webkit-slider-thumb:active {
+            transform: scale(1.1);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        input[type=range]:focus { outline: none; }
+        
+        @keyframes flowPath {
+            from { stroke-dashoffset: 14; }
+            to { stroke-dashoffset: 0; }
+        }
+        .animate-flow { animation: flowPath 0.8s linear infinite; }
+
+        @keyframes wifiPulse {
+            0% { opacity: 0; transform: translateY(4px) scale(0.95); }
+            40% { opacity: 1; transform: translateY(0) scale(1); }
+            80% { opacity: 0; transform: translateY(-6px) scale(1.05); }
+            100% { opacity: 0; transform: translateY(-6px) scale(1.05); }
+        }
+        .animate-wifi { 
+            animation: wifiPulse 2.4s ease-out infinite; 
+            transform-origin: center bottom;
+        }
+
+        .cloud-shape { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+
+        .toggle-checkbox:checked { right: 0; border-color: #4f46e5; }
+        .toggle-checkbox:checked + .toggle-label { background-color: #4f46e5; }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col relative overflow-x-hidden">
+
+    <header class="bg-blue-600 text-white py-4 md:py-6 shadow-md relative z-10">
+        <div class="max-w-7xl mx-auto px-4 md:px-6 flex items-center justify-between">
+            <div>
+                <h2 class="text-xs md:text-sm font-semibold text-blue-200 tracking-wider uppercase mb-1">[고등 지구과학] 기압과 날씨 변화</h2>
+                <h1 class="text-lg md:text-2xl font-bold">위성영상 종합 분석 시뮬레이터</h1>
+            </div>
+            <div class="flex items-center gap-3">
+                <button id="toggleTeacherModeBtn" class="bg-blue-800 hover:bg-blue-900 px-3 py-2 md:px-4 md:py-2 rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-2" title="교사용 대시보드">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                    <span class="hidden md:inline">교사 모드</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div id="studentView" class="flex-grow w-full pb-20">
+        <main class="max-w-7xl mx-auto px-4 md:px-6 py-8 w-full space-y-10">
+            
+            <!-- STEP 0. 탐구자 정보 (학번 / 이름 분리) -->
+            <section class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="bg-slate-800 px-6 py-4 border-b border-slate-900 flex justify-between items-center">
+                    <h3 class="text-xl font-bold flex items-center gap-2 text-white">
+                        <span class="bg-slate-600 text-white w-7 h-7 rounded-full flex items-center justify-center text-sm">0</span>
+                        탐구자 정보
+                    </h3>
+                </div>
+                <div class="p-6 grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50">
+                    <div>
+                        <label for="studentNum" class="block text-sm font-semibold text-slate-700 mb-1">학번 <span class="text-red-500">*</span></label>
+                        <input type="text" id="studentNum" required form="reportForm" class="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 outline-none bg-white" placeholder="예: 20101">
+                    </div>
+                    <div>
+                        <label for="studentName" class="block text-sm font-semibold text-slate-700 mb-1">이름 <span class="text-red-500">*</span></label>
+                        <input type="text" id="studentName" required form="reportForm" class="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 outline-none bg-white" placeholder="예: 홍길동">
+                    </div>
+                    <div>
+                        <label for="topic" class="block text-sm font-semibold text-slate-700 mb-1">탐구 주제</label>
+                        <input type="text" id="topic" class="w-full border border-slate-300 rounded-lg p-2.5 bg-slate-100 outline-none text-slate-600" value="위성 및 레이더 영상 원리 분석" readonly>
+                    </div>
+                </div>
+            </section>
+
+            <!-- STEP 1. 원리 실험실 -->
+            <section class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="bg-slate-100 px-6 py-4 border-b border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold flex items-center gap-2">
+                            <span class="bg-blue-500 text-white w-7 h-7 rounded-full flex items-center justify-center text-sm">1</span>
+                            위성 영상 원리 실험실 (두께·고도·주야간)
+                        </h3>
+                        <p class="text-sm text-slate-500 mt-1">구름의 두께와 고도를 조절하고, 시간을 '밤'으로 바꾸어 두 영상의 차이를 비교해 보세요.</p>
+                    </div>
+                    <div class="flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm shrink-0">
+                        <span class="text-sm font-bold text-amber-500">☀️ 낮</span>
+                        <div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
+                            <input type="checkbox" name="toggle" id="dayNightToggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer z-10 transition-all duration-300"/>
+                            <label for="dayNightToggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-amber-400 cursor-pointer transition-colors duration-300"></label>
+                        </div>
+                        <span class="text-sm font-bold text-indigo-900">🌙 밤</span>
+                    </div>
+                </div>
+
+                <div class="p-6 grid grid-cols-1 xl:grid-cols-3 gap-6 items-stretch">
+                    
+                    <!-- [1-1] 가시영상 Card -->
+                    <div class="bg-slate-50 rounded-xl border border-slate-200 p-5 flex flex-col justify-between h-full shadow-inner space-y-4">
+                        <div>
+                            <h4 class="font-bold text-lg text-slate-800">가시영상 원리 (두께와 반사)</h4>
+                            <p class="text-xs text-slate-500 mt-1">태양빛이 구름에 부딪혀 반사되는 양을 측정합니다.</p>
+                        </div>
+
+                        <div class="flex flex-col sm:flex-row gap-4 flex-grow">
+                            <!-- 시뮬레이션 창 -->
+                            <div id="visAnimBg" class="relative w-full sm:w-[58%] h-60 bg-gradient-to-b from-sky-300 to-sky-100 rounded-xl border border-sky-200 overflow-hidden shadow-inner transition-colors duration-700 shrink-0">
+                                <div id="visGround" class="absolute bottom-0 w-full h-7 bg-emerald-700/80 z-20 transition-colors duration-700"></div>
+
+                                <svg class="absolute inset-0 w-full h-full pointer-events-none z-10 transition-opacity duration-700" id="visSvgBox">
+                                    <defs>
+                                        <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                                            <feGaussianBlur stdDeviation="2.5" result="blur" />
+                                            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                                        </filter>
+                                        <marker id="arrowhead-in" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto" markerUnits="strokeWidth">
+                                            <polygon points="0 0, 5 2.5, 0 5" fill="#F59E0B" />
+                                        </marker>
+                                        <marker id="arrowhead-out" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto" markerUnits="strokeWidth">
+                                            <polygon id="refArrowPoly" points="0 0, 5 2.5, 0 5" fill="#FEF08A" />
+                                        </marker>
+                                    </defs>
+                                    <line id="incidentBeam" x1="15%" y1="15%" x2="50%" y2="55%" stroke="#F59E0B" stroke-width="4" stroke-dasharray="10,6" class="animate-flow" marker-end="url(#arrowhead-in)" filter="url(#glow)" />
+                                    <line id="reflectedBeam" x1="50%" y1="55%" x2="85%" y2="15%" stroke="#FEF08A" stroke-width="2" stroke-dasharray="10,6" class="animate-flow" marker-end="url(#arrowhead-out)" filter="url(#glow)" />
+                                </svg>
+
+                                <div id="sunIcon" class="absolute top-3 left-3 z-20 transition-all duration-700 transform origin-center">
+                                    <svg class="w-9 h-9 text-yellow-400 drop-shadow-md animate-[spin_10s_linear_infinite]" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2v2m0 16v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M2 12h2m16 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42M12 7a5 5 0 100 10 5 5 0 000-10z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                </div>
+
+                                <div class="absolute top-3 right-3 z-20">
+                                    <svg class="w-11 h-11 text-slate-700 drop-shadow-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+                                        <rect x="2" y="10" width="6" height="4" fill="#94A3B8" stroke="#334155"/><line x1="4" y1="10" x2="4" y2="14" stroke="#334155"/><line x1="6" y1="10" x2="6" y2="14" stroke="#334155"/>
+                                        <rect x="16" y="10" width="6" height="4" fill="#94A3B8" stroke="#334155"/><line x1="18" y1="10" x2="18" y2="14" stroke="#334155"/><line x1="20" y1="10" x2="20" y2="14" stroke="#334155"/>
+                                        <rect x="9" y="8" width="6" height="8" rx="1" fill="#E2E8F0" stroke="#334155"/><circle cx="12" cy="12" r="1.5" fill="#3B82F6" stroke="#1E3A8A"/>
+                                        <path d="M12 8 V4 M10 4 h4" stroke="#334155"/><path d="M10 2 Q12 5 14 2" stroke="#334155" fill="none"/>
+                                    </svg>
+                                </div>
+
+                                <div class="absolute bottom-14 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center justify-center w-28 h-20">
+                                    <svg id="visCloud" class="text-white cloud-shape" viewBox="0 0 24 24" fill="currentColor" style="transform-origin: bottom center; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.15));">
+                                        <path d="M17.5 19C19.9853 19 22 16.9853 22 14.5C22 12.1325 20.177 10.2076 17.8576 10.0153C17.3712 6.61907 14.4444 4 11 4C7.13401 4 4 7.13401 4 11C4 11.2335 4.01141 11.4643 4.03358 11.6913C1.78201 12.0628 0 13.9877 0 16.3333C0 18.9107 2.08934 21 4.66667 21H17.5V19Z" />
+                                    </svg>
+                                </div>
+                            </div>
+
+                            <div class="w-full sm:w-[42%] flex flex-col justify-between space-y-2">
+                                <div class="flex flex-col items-center justify-center bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
+                                    <span class="text-[11px] font-bold text-slate-600 mb-1">가시영상 모니터</span>
+                                    <div class="w-20 h-20 rounded-lg border-2 border-slate-300 relative overflow-hidden flex items-center justify-center shadow-md">
+                                        <div id="visMonitor" class="absolute inset-0 bg-[rgb(127,127,127)] transition-colors duration-200"></div>
+                                        <span id="visBrightnessText" class="relative z-10 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded backdrop-blur-sm text-center">회색</span>
+                                    </div>
+                                </div>
+
+                                <div class="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm">
+                                    <div class="flex justify-between items-center mb-1">
+                                        <label for="thicknessSlider" class="text-xs font-bold text-slate-700 whitespace-nowrap">구름 두께</label>
+                                        <span id="thicknessValue" class="text-blue-600 font-bold bg-blue-100 px-1.5 py-0.5 rounded text-[10px]">보통</span>
+                                    </div>
+                                    <input type="range" id="thicknessSlider" min="0" max="100" value="50">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 가시영상 탐구 질문 & 답변란 -->
+                        <div class="bg-amber-50 border-l-4 border-amber-400 p-2.5 rounded-r-xl shadow-sm text-xs text-amber-950 leading-relaxed w-full">
+                            <div class="font-bold text-amber-700 mb-0.5 flex items-center gap-1">
+                                <span class="text-xs">💡</span> <span>탐구 질문</span>
+                            </div>
+                            <p class="mb-1.5">1. 구름의 <strong class="text-amber-900 font-bold underline decoration-amber-400 underline-offset-2">두께에 따라</strong> 반사되는 태양빛의 양과 모니터 색상은 어떻게 변할까요?</p>
+                            <textarea id="ans_vis1" form="reportForm" rows="2" class="w-full mb-3 border border-amber-300 bg-white/80 rounded p-2 text-xs outline-none focus:ring-2 focus:ring-amber-500 placeholder-amber-800/50" placeholder="나의 생각 쓰기..."></textarea>
+                            
+                            <p class="pt-1.5 border-t border-amber-200/60 mb-1.5">2. 밤이 되었을 때 가시영상 모니터의 색상이 검게 변하는 이유는 무엇일까요?</p>
+                            <textarea id="ans_vis2" form="reportForm" rows="2" class="w-full border border-amber-300 bg-white/80 rounded p-2 text-xs outline-none focus:ring-2 focus:ring-amber-500 placeholder-amber-800/50" placeholder="나의 생각 쓰기..."></textarea>
+                        </div>
+                    </div>
+
+                    <!-- [1-2] 적외영상 Card -->
+                    <div class="bg-slate-50 rounded-xl border border-slate-200 p-5 flex flex-col justify-between h-full shadow-inner space-y-4">
+                        <div>
+                            <h4 class="font-bold text-lg text-slate-800">적외영상 원리 (고도와 온도)</h4>
+                            <p class="text-xs text-slate-500 mt-1">물체가 방출하는 적외선 에너지(온도)를 측정합니다.</p>
+                        </div>
+
+                        <div class="flex flex-col sm:flex-row gap-4 flex-grow">
+                            <div id="irAnimBg" class="relative w-full sm:w-[58%] h-60 bg-gradient-to-b from-slate-900 via-sky-800 to-sky-200 rounded-xl border border-sky-200 overflow-hidden flex flex-row p-2.5 gap-2 shadow-inner transition-colors duration-700 shrink-0">
+                                <div class="relative w-9 h-full rounded-full bg-gradient-to-b from-blue-500 via-yellow-200 to-red-500 border-2 border-white shadow-inner flex flex-col justify-between items-center py-2 z-20 shrink-0">
+                                    <span class="text-[9px] font-bold text-white drop-shadow-md">-50℃</span>
+                                    <div id="tempIndicator" class="absolute left-1/2 -translate-x-1/2 w-10 h-1 bg-white shadow rounded transition-all duration-300" style="bottom: 50%;"></div>
+                                    <span class="text-[9px] font-bold text-white drop-shadow-md">15℃</span>
+                                </div>
+                                
+                                <div class="flex-grow relative h-full flex flex-col justify-between items-center">
+                                    <svg class="w-11 h-11 text-white z-20 drop-shadow-md mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+                                        <rect x="2" y="10" width="6" height="4" fill="#64748B" stroke="white"/><line x1="4" y1="10" x2="4" y2="14" stroke="white"/><line x1="6" y1="10" x2="6" y2="14" stroke="white"/>
+                                        <rect x="16" y="10" width="6" height="4" fill="#64748B" stroke="white"/><line x1="18" y1="10" x2="18" y2="14" stroke="white"/><line x1="20" y1="10" x2="20" y2="14" stroke="white"/>
+                                        <rect x="9" y="8" width="6" height="8" rx="1" fill="#94A3B8" stroke="white"/><circle cx="12" cy="12" r="1.5" fill="#38BDF8" stroke="white"/>
+                                        <path d="M12 8 V4 M10 4 h4" stroke="white"/><path d="M10 2 Q12 5 14 2" stroke="white" fill="none"/>
+                                    </svg>
+
+                                    <div id="irCloudContainer" class="absolute w-20 h-10 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center justify-center transition-all duration-300" style="bottom: 50%;">
+                                        <div class="absolute bottom-[90%] left-1/2 -translate-x-1/2 w-20 h-20 pointer-events-none flex flex-col justify-end items-center z-10 overflow-visible">
+                                            <svg viewBox="0 0 100 100" class="w-full h-full overflow-visible drop-shadow-sm">
+                                                <g id="irWaveGroup" class="transition-opacity duration-300">
+                                                    <path id="irWave3" d="M 10,45 A 55,55 0 0,1 90,45" stroke="#fca5a5" stroke-width="3" fill="none" stroke-linecap="round" class="animate-wifi" style="animation-delay: 0.8s;"/>
+                                                    <path id="irWave2" d="M 25,60 A 35,35 0 0,1 75,60" stroke="#fca5a5" stroke-width="4" fill="none" stroke-linecap="round" class="animate-wifi" style="animation-delay: 0.4s;"/>
+                                                    <path id="irWave1" d="M 40,75 A 15,15 0 0,1 60,75" stroke="#fca5a5" stroke-width="3" fill="none" stroke-linecap="round" class="animate-wifi" style="animation-delay: 0s;"/>
+                                                </g>
+                                            </svg>
+                                        </div>
+                                        <svg id="irCloud" class="w-full h-full text-white cloud-shape drop-shadow-lg relative z-20" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M17.5 19C19.9853 19 22 16.9853 22 14.5C22 12.1325 20.177 10.2076 17.8576 10.0153C17.3712 6.61907 14.4444 4 11 4C7.13401 4 4 7.13401 4 11C4 11.2335 4.01141 11.4643 4.03358 11.6913C1.78201 12.0628 0 13.9877 0 16.3333C0 18.9107 2.08934 21 4.66667 21H17.5V19Z" />
+                                        </svg>
+                                    </div>
+                                    <div id="irGround" class="w-full h-7 bg-amber-800 rounded-t z-20 shrink-0 transition-colors duration-700"></div>
+                                </div>
+                            </div>
+
+                            <div class="w-full sm:w-[42%] flex flex-col justify-between space-y-2">
+                                <div class="flex flex-col items-center justify-center bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
+                                    <span class="text-[11px] font-bold text-slate-600 mb-1">적외영상 모니터</span>
+                                    <div class="w-20 h-20 rounded-lg border-2 border-slate-300 relative overflow-hidden flex items-center justify-center shadow-md">
+                                        <div id="irMonitor" class="absolute inset-0 bg-[rgb(127,127,127)] transition-colors duration-200"></div>
+                                        <span id="irBrightnessText" class="relative z-10 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded backdrop-blur-sm text-center">회색</span>
+                                    </div>
+                                </div>
+
+                                <div class="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm">
+                                    <div class="flex justify-between items-center mb-1">
+                                        <label for="heightSlider" class="text-xs font-bold text-slate-700 whitespace-nowrap">구름 고도</label>
+                                        <span id="heightValue" class="text-teal-600 font-bold bg-teal-100 px-1.5 py-0.5 rounded text-[10px]">중층</span>
+                                    </div>
+                                    <input type="range" id="heightSlider" min="0" max="100" value="50">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 적외영상 탐구 질문 & 답변란 -->
+                        <div class="bg-teal-50 border-l-4 border-teal-500 p-2.5 rounded-r-xl shadow-sm text-xs text-teal-950 leading-relaxed w-full">
+                            <div class="font-bold text-teal-700 mb-0.5 flex items-center gap-1">
+                                <span class="text-xs">💡</span> <span>탐구 질문</span>
+                            </div>
+                            <p class="mb-1.5">1. 고도에 따라 <strong class="text-teal-900 font-bold underline decoration-teal-400 underline-offset-2">적외선 방출량</strong>과 모니터 색상은 어떻게 변할까요?</p>
+                            <textarea id="ans_ir1" form="reportForm" rows="2" class="w-full mb-3 border border-teal-300 bg-white/80 rounded p-2 text-xs outline-none focus:ring-2 focus:ring-teal-500 placeholder-teal-800/50" placeholder="나의 생각 쓰기..."></textarea>
+                            
+                            <p class="pt-1.5 border-t border-teal-200/60 mb-1.5">2. 낮과 밤이 바뀌어도 적외선 영상의 모니터 밝기에 변화가 없는 이유는 무엇일까요?</p>
+                            <textarea id="ans_ir2" form="reportForm" rows="2" class="w-full border border-teal-300 bg-white/80 rounded p-2 text-xs outline-none focus:ring-2 focus:ring-teal-500 placeholder-teal-800/50" placeholder="나의 생각 쓰기..."></textarea>
+                           
+                            <div class="mt-2 text-[9px] text-teal-800 bg-teal-100/80 p-1 rounded border border-teal-200/80">
+                                📌 <strong>약속:</strong> 온도가 낮을수록 <strong class="bg-white px-1 py-0.5 rounded border border-slate-200 font-bold">밝은 흰색</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- [1-3] 레이더영상 Card -->
+                    <div class="bg-slate-50 rounded-xl border border-slate-200 p-5 flex flex-col justify-between h-full shadow-inner space-y-4">
+                        <div>
+                            <h4 class="font-bold text-lg text-slate-800">레이더영상 원리 (강수와 전파)</h4>
+                            <p class="text-xs text-slate-500 mt-1">지상에서 쏜 전파가 빗방울에 부딪혀 돌아오는 양을 측정합니다.</p>
+                        </div>
+
+                        <div class="flex flex-col sm:flex-row gap-4 flex-grow">
+                            <div id="radarAnimBg" class="relative w-full sm:w-[58%] h-60 bg-slate-900 rounded-xl border border-slate-700 overflow-hidden shadow-inner shrink-0">
+                                <div class="absolute top-2 left-2 z-20 flex flex-col gap-0.5 text-[9px] bg-slate-900/85 p-1.5 rounded border border-slate-700 backdrop-blur-sm max-w-[110px]">
+                                    <div class="flex items-center gap-1 text-sky-400 font-bold leading-tight">
+                                        <span class="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse shrink-0"></span>
+                                        <span>↗ 발사 전파</span>
+                                    </div>
+                                    <div class="flex items-center gap-1 text-rose-400 font-bold leading-tight" id="legendEchoContainer">
+                                        <span id="legendEchoDot" class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse shrink-0"></span>
+                                        <span>↙ 반사 에코</span>
+                                    </div>
+                                </div>
+
+                                <div class="absolute bottom-0 w-full h-7 bg-slate-800 z-20 flex items-center justify-start px-2 border-t border-slate-700">
+                                    <div class="flex items-center gap-1 text-slate-300 text-[10px] font-bold whitespace-nowrap">
+                                        <svg class="w-3.5 h-3.5 text-indigo-400 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
+                                        </svg>
+                                        <span class="whitespace-nowrap">지상 기상레이더</span>
+                                    </div>
+                                </div>
+
+                                <svg class="absolute inset-0 w-full h-full pointer-events-none z-10">
+                                    <defs>
+                                        <marker id="radar-arrow-out" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                                            <polygon points="0 0, 6 3, 0 6" fill="#38BDF8" />
+                                        </marker>
+                                        <marker id="radar-arrow-in" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                                            <polygon id="radarArrowInPoly" points="0 0, 6 3, 0 6" fill="#F43F5E" />
+                                        </marker>
+                                    </defs>
+
+                                    <line id="radarBeamOut" x1="22%" y1="80%" x2="68%" y2="30%" stroke="#38BDF8" stroke-width="2.5" stroke-dasharray="6,4" class="animate-flow" marker-end="url(#radar-arrow-out)" />
+                                    <line id="radarBeamIn" x1="72%" y1="30%" x2="28%" y2="80%" stroke="#F43F5E" stroke-width="2.5" stroke-dasharray="6,4" class="animate-flow" marker-end="url(#radar-arrow-in)" />
+                                </svg>
+
+                                <div class="absolute top-2 right-2 z-20 w-24 h-16 flex items-center justify-center">
+                                    <svg class="absolute inset-0 w-full h-full text-slate-500/90 cloud-shape drop-shadow-md" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M17.5 19C19.9853 19 22 16.9853 22 14.5C22 12.1325 20.177 10.2076 17.8576 10.0153C17.3712 6.61907 14.4444 4 11 4C7.13401 4 4 7.13401 4 11C4 11.2335 4.01141 11.4643 4.03358 11.6913C1.78201 12.0628 0 13.9877 0 16.3333C0 18.9107 2.08934 21 4.66667 21H17.5V19Z" />
+                                    </svg>
+                                    <div id="raindropsContainer" class="relative z-10 px-2 pt-2 pb-1 flex flex-wrap items-center justify-center gap-0.5 max-w-[80%] max-h-[70%] overflow-hidden pointer-events-none transition-opacity duration-300">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="w-full sm:w-[42%] flex flex-col justify-between space-y-2">
+                                <div class="flex flex-col items-center justify-center bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
+                                    <span class="text-[11px] font-bold text-slate-600 mb-1">레이더영상 모니터</span>
+                                    <div class="w-20 h-20 rounded-lg border-2 border-slate-300 relative overflow-hidden flex items-center justify-center shadow-md">
+                                        <div id="radarMonitor" class="absolute inset-0 bg-slate-900 transition-colors duration-200"></div>
+                                        <span id="radarBrightnessText" class="relative z-10 bg-black/70 text-white text-[9px] px-1 py-0.5 rounded backdrop-blur-sm text-center leading-tight">강수 없음<br><span class="text-[9px] opacity-80">(어두움)</span></span>
+                                    </div>
+                                </div>
+
+                                <div class="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm">
+                                    <div class="flex justify-between items-center mb-1 gap-1">
+                                        <label for="radarSlider" class="text-[11px] sm:text-xs font-bold text-slate-700 whitespace-nowrap shrink-0">강수 입자(빗방울)</label>
+                                        <span id="radarValue" class="text-purple-600 font-bold bg-purple-100 px-1.5 py-0.5 rounded text-[10px] shrink-0">없음</span>
+                                    </div>
+                                    <input type="range" id="radarSlider" min="0" max="100" value="0">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 레이더영상 탐구 질문 & 답변란 -->
+                        <div class="bg-purple-50 border-l-4 border-purple-500 p-2.5 rounded-r-xl shadow-sm text-xs text-purple-950 leading-relaxed w-full">
+                            <div class="font-bold text-purple-700 mb-0.5 flex items-center gap-1">
+                                <span class="text-xs">💡</span> <span>탐구 질문</span>
+                            </div>
+                            <p class="mb-1.5">1. 구름 속 <strong class="text-purple-900 font-bold underline decoration-purple-400 underline-offset-2">빗방울이 많아지면</strong> 반사되어 돌아오는 전파 세기와 모니터 색상은 어떻게 변할까요?</p>
+                            <textarea id="ans_rad1" form="reportForm" rows="2" class="w-full mb-3 border border-purple-300 bg-white/80 rounded p-2 text-xs outline-none focus:ring-2 focus:ring-purple-500 placeholder-purple-800/50" placeholder="나의 생각 쓰기..."></textarea>
+                            
+                            <p class="pt-1.5 border-t border-purple-200/60 mb-1.5">2. 구름이 아주 두껍더라도 내부에 빗방울(강수 입자)이 없으면 레이더 모니터에는 어떻게 나타날까요?</p>
+                            <textarea id="ans_rad2" form="reportForm" rows="2" class="w-full border border-purple-300 bg-white/80 rounded p-2 text-xs outline-none focus:ring-2 focus:ring-purple-500 placeholder-purple-800/50" placeholder="나의 생각 쓰기..."></textarea>
+                            
+                            <div class="mt-2 text-[9px] text-purple-900 bg-purple-100/80 p-1 rounded border border-purple-200/80">
+                                📌 <strong>약속:</strong> 입자 많을수록 <strong class="font-bold">파랑➔초록➔노랑➔빨강➔보라</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+            <!-- STEP 2. 실제 기상 자료 종합 분석 -->
+            <section class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="bg-indigo-900 px-6 py-4 border-b border-indigo-950 flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+                    <div>
+                        <h3 class="text-xl font-bold flex items-center gap-2 text-white">
+                            <span class="bg-indigo-600 text-white w-7 h-7 rounded-full flex items-center justify-center text-sm">2</span>
+                            실제 기상 자료 종합 분석 (가시·적외·레이더 & 일기도)
+                        </h3>
+                        <p class="text-sm text-indigo-200 mt-1">STEP 1에서 배운 원리를 바탕으로 실제 위성/레이더 영상과 일기도의 A, B 지점 기상을 종합 분석해 보세요.</p>
+                    </div>
+                    <span class="bg-indigo-800 text-indigo-100 text-xs px-3 py-1.5 rounded-full border border-indigo-700 font-medium shrink-0">실전 적용 데이터</span>
+                </div>
+
+                <div class="p-6 space-y-8">
+                    <div>
+                        <h4 class="text-base font-bold text-slate-800 mb-3 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-indigo-600"></span>
+                            제시된 관측 자료 (2021년 9월 21일 09시)
+                        </h4>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <!-- ① 가시 영상 -->
+                            <div class="bg-slate-900 rounded-xl p-3 border border-slate-700 flex flex-col items-center">
+                                <div class="text-xs font-bold text-slate-200 mb-2">① 가시 영상</div>
+                                <div class="relative w-full aspect-square bg-slate-800 rounded-lg overflow-hidden border border-slate-700 flex items-center justify-center">
+                                    <img src="345.jpg" alt="가시 영상" class="w-full h-full object-cover" style="object-position: 0% 50%;" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20200%20200%22%3E%3Crect%20width%3D%22200%22%20height%3D%22200%22%20fill%3D%22%230f172a%22%2F%3E%3Ctext%20x%3D%22100%22%20y%3D%22100%22%20fill%3D%22%23e2e8f0%22%20font-size%3D%2214%22%20text-anchor%3D%22middle%22%20font-family%3D%22sans-serif%22%3E%E2%91%A0%20%EA%B0%80%EC%8B%9C%20%EC%98%81%EC%83%81%20(A%2C%20B)%3C%2Ftext%3E%3C%2Fsvg%3E';">
+                                </div>
+                                <div class="mt-2 text-[11px] text-slate-300 text-center">
+                                    A: 매우 밝음(두꺼움) <br> B: 다소 밝음/회색
+                                </div>
+                            </div>
+
+                            <!-- ② 적외 영상 -->
+                            <div class="bg-slate-900 rounded-xl p-3 border border-slate-700 flex flex-col items-center">
+                                <div class="text-xs font-bold text-slate-200 mb-2">② 적외 영상</div>
+                                <div class="relative w-full aspect-square bg-slate-800 rounded-lg overflow-hidden border border-slate-700 flex items-center justify-center">
+                                    <img src="345.jpg" alt="적외 영상" class="w-full h-full object-cover" style="object-position: 50% 50%;" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20200%20200%22%3E%3Crect%20width%3D%22200%22%20height%3D%22200%22%20fill%3D%22%230f172a%22%2F%3E%3Ctext%20x%3D%22100%22%20y%3D%22100%22%20fill%3D%22%23e2e8f0%22%20font-size%3D%2214%22%20text-anchor%3D%22middle%22%20font-family%3D%22sans-serif%22%3E%E2%91%A1%20%EC%A0%81%EC%99%B8%20%EC%98%81%EC%83%81%20(A%2C%20B)%3C%2Ftext%3E%3C%2Fsvg%3E';">
+                                </div>
+                                <div class="mt-2 text-[11px] text-slate-300 text-center">
+                                    A: 매우 밝음(고도 높음)<br> B: 밝음(상층 권운 영역)
+                                </div>
+                            </div>
+
+                            <!-- ③ 레이더 영상 -->
+                            <div class="bg-slate-900 rounded-xl p-3 border border-slate-700 flex flex-col items-center">
+                                <div class="text-xs font-bold text-slate-200 mb-2">③ 레이더 영상</div>
+                                <div class="relative w-full aspect-square bg-slate-950 rounded-lg overflow-hidden border border-slate-700 flex items-center justify-center">
+                                    <img src="345.jpg" alt="레이더 영상" class="w-full h-full object-cover" style="object-position: 100% 50%;" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20200%20200%22%3E%3Crect%20width%3D%22200%22%20height%3D%22200%22%20fill%3D%22%230f172a%22%2F%3E%3Ctext%20x%3D%22100%22%20y%3D%22100%22%20fill%3D%22%23e2e8f0%22%20font-size%3D%2214%22%20text-anchor%3D%22middle%22%20font-family%3D%22sans-serif%22%3E%E2%91%A2%20%EB%A0%88%EC%9D%B4%EB%8D%94%20%EC%98%81%EC%83%81%3C%2Ftext%3E%3C%2Fsvg%3E';">
+                                </div>
+                                <div class="mt-2 text-[11px] text-slate-300 text-center">
+                                    A: 강한 강수 에코(노랑~빨강)<br> B: 강수 에코 없음
+                                </div>
+                            </div>
+
+                            <!-- ④ 지상 일기도 -->
+                            <div class="bg-amber-50/50 rounded-xl p-3 border border-amber-200 flex flex-col items-center">
+                                <div class="text-xs font-bold text-amber-900 mb-2">④ 지상 일기도 (09시)</div>
+                                <div class="relative w-full aspect-square bg-white rounded-lg overflow-hidden border border-slate-300 flex items-center justify-center p-1">
+                                    <img src="123.png" alt="지상 일기도" class="w-full h-full object-contain" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20200%20200%22%3E%3Crect%20width%3D%22200%22%20height%3D%22200%22%20fill%3D%22%23fef3c7%22%2F%3E%3Ctext%20x%3D%22100%22%20y%3D%22100%22%20fill%3D%22%2378350f%22%20font-size%3D%2214%22%20text-anchor%3D%22middle%22%20font-family%3D%22sans-serif%22%3E%E2%91%A3%20%EC%A7%80%EC%83%81%20%EC%9D%BC%EA%B8%B0%EB%8F%84%20(09%EC%8B%9C)%3C%2Ftext%3E%3C%2Fsvg%3E';">
+                                </div>
+                                <div class="mt-2 text-[11px] text-amber-900 text-center font-medium">
+                                    한반도를 지나는 온대저기압과<br><strong class="text-blue-700">한랭 전선</strong> / <strong class="text-red-600">온난 전선</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 퀴즈 카드 영역 -->
+                    <div class="bg-indigo-50/60 p-5 rounded-xl border border-indigo-100 space-y-5">
+                        <h4 class="text-base font-bold text-indigo-950 flex items-center gap-2">
+                            <span>🔍</span> 자료 해석 및 기상 추론 (클릭하여 정답 확인)
+                        </h4>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                            <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
+                                <div>
+                                    <span class="inline-block px-2 py-0.5 bg-rose-100 text-rose-700 font-bold rounded mb-2">질문 1</span>
+                                    <h5 class="font-bold text-slate-800 text-sm mb-2">A 지점의 구름 종류와 날씨 특성은?</h5>
+                                    <p class="text-slate-600 leading-relaxed mb-3">가시·적외 영상 모두 매우 밝고, 레이더에 강한 에코가 포착된 A 지점의 구름은?</p>
+                                </div>
+                                <button onclick="toggleAnalysisAns('ans1')" class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-md transition-colors text-xs">
+                                    분석 결과 보기
+                                </button>
+                                <div id="ans1" class="hidden mt-3 pt-3 border-t border-slate-100 text-slate-700 leading-relaxed bg-slate-50 p-2.5 rounded">
+                                    ✅ <strong>적란운 (적운형 구름)</strong><br>
+                                    두껍고(가시 밝음) 최상부 고도가 높으며(적외 밝음), 빗방울이 많아(레이더 노랑~빨강) <strong>좁은 지역에 소나기/뇌우</strong>가 내립니다.
+                                </div>
+                            </div>
+
+                            <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
+                                <div>
+                                    <span class="inline-block px-2 py-0.5 bg-sky-100 text-sky-700 font-bold rounded mb-2">질문 2</span>
+                                    <h5 class="font-bold text-slate-800 text-sm mb-2">B 지점은 왜 비가 내리지 않을까?</h5>
+                                    <p class="text-slate-600 leading-relaxed mb-3">적외 영상에서는 비교적 밝게 보이지만, 레이더 에코가 전혀 나타나지 않는 이유는?</p>
+                                </div>
+                                <button onclick="toggleAnalysisAns('ans2')" class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-md transition-colors text-xs">
+                                    분석 결과 보기
+                                </button>
+                                <div id="ans2" class="hidden mt-3 pt-3 border-t border-slate-100 text-slate-700 leading-relaxed bg-slate-50 p-2.5 rounded">
+                                    ✅ <strong>높고 얇은 상층운 (권운 등)</strong><br>
+                                    고도가 높아 적외 영상은 밝지만, 구름 두께가 얇고 내부 강수 입자(빗방울)가 없어 <strong>레이더에 반사되는 전파가 없기 때문</strong>입니다.
+                                </div>
+                            </div>
+
+                            <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-between">
+                                <div>
+                                    <span class="inline-block px-2 py-0.5 bg-amber-100 text-amber-800 font-bold rounded mb-2">질문 3</span>
+                                    <h5 class="font-bold text-slate-800 text-sm mb-2">A 지점의 좁고 강한 구름 띠와 연관된 전선은?</h5>
+                                    <p class="text-slate-600 leading-relaxed mb-3">일기도 ④와 비교했을 때 A 지점을 따라 형성된 좁고 강한 강수대의 원인은?</p>
+                                </div>
+                                <button onclick="toggleAnalysisAns('ans3')" class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-md transition-colors text-xs">
+                                    분석 결과 보기
+                                </button>
+                                <div id="ans3" class="hidden mt-3 pt-3 border-t border-slate-100 text-slate-700 leading-relaxed bg-slate-50 p-2.5 rounded">
+                                    ✅ <strong>한랭 전선 (Cold Front)</strong><br>
+                                    온대 저기압의 한랭 전선 후면/부근에서는 공기가 급격히 상승하여 <strong>적란운이 발달하고 좁은 띠 모양의 강한 강수대</strong>가 형성됩니다.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- STEP 3. 최종 보고서 작성 -->
+            <section class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="bg-slate-800 px-6 py-4 border-b border-slate-900 flex justify-between items-center">
+                    <div>
+                        <h3 class="text-xl font-bold flex items-center gap-2 text-white">
+                            <span class="bg-slate-600 text-white w-7 h-7 rounded-full flex items-center justify-center text-sm">3</span>
+                            자기주도 종합 탐구 보고서
+                        </h3>
+                        <p class="text-sm text-slate-300 mt-1">지금까지의 탐구 및 실전 자료 분석 결과를 바탕으로 종합적인 결론을 작성해 제출하세요.</p>
+                    </div>
+                </div>
+
+                <div class="p-6">
+                    <form id="reportForm" class="space-y-6">
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">1. 관측 영상별 기본 원리 요약 (가시/적외/레이더)</label>
+                            <textarea id="observation1" rows="3" class="w-full border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none text-sm" placeholder="구름 두께, 고도, 강수 입자에 따른 각 영상의 변화 특성을 요약하세요."></textarea>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">2. 각 기상 관측 영상의 특징 및 활용 비교</label>
+                            <textarea id="observation2" rows="3" class="w-full border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none text-sm" placeholder="가시, 적외, 레이더 영상이 각각 어떠한 상황에서 유용하게 쓰일 수 있는지 비교하여 설명하세요."></textarea>
+                        </div>
+
+                        <div>
+                            <label for="conclusion" class="block text-sm font-semibold text-slate-700 mb-1">3. 최종 결론 및 느낀 점</label>
+                            <textarea id="conclusion" rows="3" class="w-full border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none text-sm" placeholder="여러 기상 관측 장비의 영상 데이터를 종합해서 날씨를 분석해야 하는 이유를 적어보세요."></textarea>
+                        </div>
+
+                        <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                            <button type="submit" id="saveBtn" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-md transition-colors flex items-center gap-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path></svg>
+                                탐구 결과 제출하기
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- 교사 모드 대시보드 (학번 / 이름 및 가시 / 적외 / 레이더 각각 개별 열로 분리) -->
+    <div id="teacherView" class="flex-grow w-full hidden bg-slate-50 pb-20">
+        <main class="max-w-7xl mx-auto px-4 md:px-6 py-8 w-full space-y-6">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-800">탐구 보고서 제출 현황</h2>
+                    <p class="text-slate-500 mt-1">학생들이 제출한 탐구 질문 답변(가시, 적외, 레이더)과 보고서를 실시간으로 확인하고 AI 피드백을 제공합니다.</p>
+                </div>
+                <div class="flex gap-2">
+                    <button id="downloadCsvBtn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm flex items-center gap-2 text-sm transition-colors">
+                        CSV 다운로드
+                    </button>
+                    <button id="exitTeacherModeBtn" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-lg font-medium shadow-sm flex items-center gap-2 text-sm transition-colors">
+                        학생 화면으로
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-slate-500 font-medium">전체 학생 수</p>
+                        <p class="text-2xl font-bold text-slate-800">25명</p>
+                    </div>
+                </div>
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-slate-500 font-medium">제출 완료</p>
+                        <p class="text-2xl font-bold text-teal-600" id="submittedCount">2명</p>
+                    </div>
+                </div>
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-center">
+                    <div class="flex justify-between text-sm mb-2">
+                        <span class="text-slate-500 font-medium">제출 진행률</span>
+                        <span class="font-bold text-blue-600" id="progressPercent">8%</span>
+                    </div>
+                    <div class="w-full bg-slate-200 rounded-full h-2.5">
+                        <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-500" style="width: 8%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 대시보드 테이블: 학번, 이름 및 가시 / 적외 / 레이더 열 분리 -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm text-slate-600">
+                        <thead class="bg-slate-50 text-slate-700 uppercase border-b border-slate-200 text-xs">
+                            <tr>
+                                <th scope="col" class="px-3 py-3 w-20">제출일시</th>
+                                <th scope="col" class="px-2 py-3 w-16">학번</th>
+                                <th scope="col" class="px-2 py-3 w-20">이름</th>
+                                <th scope="col" class="px-3 py-3 bg-amber-100/50 text-amber-900 border-l border-r border-amber-200/60">☀️ 가시영상 답변</th>
+                                <th scope="col" class="px-3 py-3 bg-teal-100/50 text-teal-900 border-r border-teal-200/60">🌡️ 적외영상 답변</th>
+                                <th scope="col" class="px-3 py-3 bg-purple-100/50 text-purple-900 border-r border-purple-200/60">📡 레이더영상 답변</th>
+                                <th scope="col" class="px-3 py-3">적용 분석</th>
+                                <th scope="col" class="px-3 py-3">최종 결론</th>
+                                <th scope="col" class="px-3 py-3 w-24 text-center">피드백</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reportsTableBody" class="divide-y divide-slate-100">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 로그인 모달 -->
+    <div id="loginModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm transform scale-95 transition-transform duration-300">
+            <h3 class="text-xl font-bold text-slate-800 mb-2 flex items-center gap-2">관리자 접근</h3>
+            <p class="text-sm text-slate-500 mb-4">대시보드에 접근하려면 비밀번호를 입력하세요. (비밀번호: 0000)</p>
+            <input type="password" id="adminPassword" class="w-full border border-slate-300 rounded-lg p-3 mb-4 focus:ring-2 focus:ring-blue-500 outline-none">
+            <div class="flex justify-end gap-2">
+                <button id="cancelLoginBtn" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium">취소</button>
+                <button id="confirmLoginBtn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI 피드백 모달 -->
+    <div id="feedbackModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-3xl transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh]">
+            <h3 class="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2 border-b pb-3">
+                <span id="feedbackStudentName" class="text-purple-700">학생</span> 탐구 보고서 피드백
+            </h3>
+            
+            <div class="overflow-y-auto pr-2 mb-4 space-y-4">
+                <!-- 학생 탐구 상세 내용 -->
+                <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 text-xs space-y-3">
+                    <p class="font-bold text-slate-800 text-sm mb-1">📝 학생 영역별 답변 및 보고서 전체 내용</p>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div class="bg-amber-50/80 p-2.5 rounded border border-amber-200">
+                            <span class="font-bold text-amber-900 block mb-1">☀️ 가시영상 답변</span>
+                            <div id="feedbackVisAns" class="text-slate-700 whitespace-pre-line leading-relaxed"></div>
+                        </div>
+                        <div class="bg-teal-50/80 p-2.5 rounded border border-teal-200">
+                            <span class="font-bold text-teal-900 block mb-1">🌡️ 적외영상 답변</span>
+                            <div id="feedbackIrAns" class="text-slate-700 whitespace-pre-line leading-relaxed"></div>
+                        </div>
+                        <div class="bg-purple-50/80 p-2.5 rounded border border-purple-200">
+                            <span class="font-bold text-purple-900 block mb-1">📡 레이더영상 답변</span>
+                            <div id="feedbackRadAns" class="text-slate-700 whitespace-pre-line leading-relaxed"></div>
+                        </div>
+                    </div>
+
+                    <div class="pt-2 border-t border-slate-200 space-y-1">
+                        <div>
+                            <span class="font-semibold text-slate-700">원리 요약: </span>
+                            <span id="feedbackStudentSummary" class="text-slate-600">요약...</span>
+                        </div>
+                        <div>
+                            <span class="font-semibold text-slate-700">최종 결론: </span>
+                            <span id="feedbackStudentConclusion" class="text-slate-600 italic">결론 내용...</span>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="block text-sm font-semibold text-slate-700">교사 피드백 (AI 초안 생성 후 수정)</label>
+                        <button id="generateAiBtn" class="bg-purple-100 hover:bg-purple-200 text-purple-700 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                            AI 피드백 자동 생성
+                        </button>
+                    </div>
+                    <textarea id="teacherFeedbackText" rows="4" class="w-full border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-purple-500 outline-none text-sm"></textarea>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-auto pt-4 border-t">
+                <button id="cancelFeedbackBtn" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium">취소</button>
+                <button id="saveFeedbackBtn" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium">저장 및 전송</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toastContainer" class="fixed top-4 left-1/2 transform -translate-x-1/2 z-[60] flex flex-col gap-2"></div>
+
+    <script>
+        function showToast(msg, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            const color = type === 'error' ? 'bg-red-800' : 'bg-slate-800';
+            toast.className = `${color} text-white px-5 py-3 rounded-lg shadow-xl flex items-center gap-2 opacity-0 transition-opacity duration-300 transform -translate-y-4 text-sm z-50`;
+            toast.innerHTML = msg;
+            container.appendChild(toast);
+            requestAnimationFrame(() => toast.classList.remove('opacity-0', '-translate-y-4'));
+            setTimeout(() => {
+                toast.classList.add('opacity-0', '-translate-y-4');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // --- STEP 1. 시뮬레이터 변수 및 업데이트 함수 ---
+        const thicknessSlider = document.getElementById('thicknessSlider');
+        const heightSlider = document.getElementById('heightSlider');
+        const radarSlider = document.getElementById('radarSlider');
+        let isNightMode = false;
+
+        function updateVisibleSim() {
+            const t = parseInt(thicknessSlider.value);
+            
+            let label = "보통";
+            if (t < 20) label = "투명함"; else if (t < 40) label = "얇음"; else if (t > 80) label = "매우 두꺼움"; else if (t > 60) label = "두꺼움";
+            document.getElementById('thicknessValue').textContent = label;
+
+            const scaleX = 0.8 + (t / 100) * 0.3; 
+            const scaleY = 0.5 + (t / 100) * 1.5; 
+            const opacity = 0.4 + (t / 100) * 0.6;
+            const visCloud = document.getElementById('visCloud');
+            visCloud.style.transform = `scale(${scaleX}, ${scaleY})`;
+            visCloud.style.opacity = opacity;
+            
+            const hitY = 55 - (t / 100) * 20;
+            document.getElementById('incidentBeam').setAttribute('y2', `${hitY}%`);
+            document.getElementById('reflectedBeam').setAttribute('y1', `${hitY}%`);
+
+            const strokeWidth = 0.5 + (t / 100) * 7.5;
+            const refOpacity = 0.1 + (t / 100) * 0.9;
+            document.getElementById('reflectedBeam').setAttribute('stroke-width', strokeWidth);
+            document.getElementById('reflectedBeam').style.opacity = refOpacity;
+            document.getElementById('refArrowPoly').style.opacity = refOpacity;
+            
+            const visMonitor = document.getElementById('visMonitor');
+            const visText = document.getElementById('visBrightnessText');
+            
+            if(isNightMode) {
+                visMonitor.style.backgroundColor = `rgb(0, 0, 0)`;
+                visText.innerHTML = "관측 불가<br><span class=\"text-[9px] opacity-80\">(야간)</span>";
+                visText.classList.replace('bg-black/60', 'bg-red-600/90');
+            } else {
+                const rgb = Math.floor((t / 100) * 255);
+                visMonitor.style.backgroundColor = `rgb(${rgb}, ${rgb}, ${rgb})`;
+                visText.textContent = rgb < 50 ? "어두움" : (rgb > 200 ? "밝음" : "회색");
+                if (visText.classList.contains('bg-red-600/90')) {
+                    visText.classList.replace('bg-red-600/90', 'bg-black/60');
+                }
+            }
+        }
+
+        function updateIrSim() {
+            const h = parseInt(heightSlider.value);
+            
+            let label = "중층";
+            if (h < 20) label = "최하층"; else if (h < 40) label = "하층"; else if (h > 80) label = "상층"; else if (h > 60) label = "중상층";
+            document.getElementById('heightValue').textContent = label;
+
+            const visualHeight = 10 + (h / 100) * 60;
+            document.getElementById('irCloudContainer').style.bottom = `${visualHeight}%`;
+            document.getElementById('tempIndicator').style.bottom = `${visualHeight}%`;
+            
+            const blueTint = Math.floor((h / 100) * 255);
+            document.getElementById('irCloud').style.color = `rgb(${255 - Math.floor(blueTint * 0.4)}, ${255 - Math.floor(blueTint * 0.2)}, 255)`;
+
+            const waveIntensity = 1 - (h / 100);
+            const waveOpacity = 0.1 + (waveIntensity * 0.9);
+            
+            document.getElementById('irWaveGroup').style.opacity = waveOpacity;
+            
+            ['irWave1', 'irWave2', 'irWave3'].forEach(id => {
+                const el = document.getElementById(id);
+                el.setAttribute('stroke-width', 1 + waveIntensity * 3);
+            });
+
+            const rgb = Math.floor((h / 100) * 255);
+            document.getElementById('irMonitor').style.backgroundColor = `rgb(${rgb}, ${rgb}, ${rgb})`;
+            document.getElementById('irBrightnessText').textContent = rgb < 50 ? "어두움" : (rgb > 200 ? "밝음" : "회색");
+        }
+
+        function updateRadarSim() {
+            const r = parseInt(radarSlider.value);
+
+            let label = "없음";
+            if (r > 0 && r <= 20) label = "약함";
+            else if (r > 20 && r <= 50) label = "보통";
+            else if (r > 50 && r <= 80) label = "강함";
+            else if (r > 80) label = "매우 강함";
+            document.getElementById('radarValue').textContent = label;
+
+            const raindropsContainer = document.getElementById('raindropsContainer');
+            const dropCount = Math.floor((r / 100) * 16);
+            let dropHtml = '';
+            for (let i = 0; i < dropCount; i++) {
+                dropHtml += `<span class="inline-block w-1.5 h-2 bg-sky-400 rounded-full animate-bounce" style="animation-delay: ${(i * 0.1).toFixed(1)}s"></span>`;
+            }
+            raindropsContainer.innerHTML = dropHtml;
+
+            const monitor = document.getElementById('radarMonitor');
+            const text = document.getElementById('radarBrightnessText');
+            let echoColor = '#f43f5e';
+
+            if (r === 0) {
+                echoColor = '#475569';
+                monitor.style.backgroundColor = '#0f172a';
+                text.innerHTML = '강수 없음<br><span class="text-[9px] opacity-80">(어두움)</span>';
+            } else if (r <= 20) {
+                echoColor = '#3b82f6';
+                monitor.style.backgroundColor = echoColor;
+                text.innerHTML = '파란색<br><span class="text-[9px] opacity-80">(약한 비)</span>';
+            } else if (r <= 45) {
+                echoColor = '#22c55e';
+                monitor.style.backgroundColor = echoColor;
+                text.innerHTML = '초록색<br><span class="text-[9px] opacity-80">(보통 비)</span>';
+            } else if (r <= 70) {
+                echoColor = '#eab308';
+                monitor.style.backgroundColor = echoColor;
+                text.innerHTML = '노란색<br><span class="text-[9px] opacity-80">(강한 비)</span>';
+            } else if (r <= 88) {
+                echoColor = '#ef4444';
+                monitor.style.backgroundColor = echoColor;
+                text.innerHTML = '빨간색<br><span class="text-[9px] opacity-80">(매우 강한 비)</span>';
+            } else {
+                echoColor = '#a855f7';
+                monitor.style.backgroundColor = echoColor;
+                text.innerHTML = '보라색<br><span class="text-[9px] opacity-80">(폭우/뇌우)</span>';
+            }
+
+            const beamIn = document.getElementById('radarBeamIn');
+            const opacity = r === 0 ? 0.1 : 0.3 + (r / 100) * 0.7;
+            const strokeWidth = r === 0 ? 1 : 1.5 + (r / 100) * 5;
+            beamIn.style.opacity = opacity;
+            beamIn.setAttribute('stroke-width', strokeWidth);
+            beamIn.setAttribute('stroke', echoColor);
+
+            const arrowPoly = document.getElementById('radarArrowInPoly');
+            if (arrowPoly) arrowPoly.setAttribute('fill', echoColor);
+            
+            const legendDot = document.getElementById('legendEchoDot');
+            if (legendDot) legendDot.style.backgroundColor = echoColor;
+        }
+
+        thicknessSlider.addEventListener('input', updateVisibleSim);
+        heightSlider.addEventListener('input', updateIrSim);
+        radarSlider.addEventListener('input', updateRadarSim);
+        updateVisibleSim(); updateIrSim(); updateRadarSim();
+
+        // 토글 스위치 (주야간)
+        const dnToggle = document.getElementById('dayNightToggle');
+        dnToggle.addEventListener('change', (e) => {
+            isNightMode = e.target.checked;
+            
+            const visBg = document.getElementById('visAnimBg');
+            const visGround = document.getElementById('visGround');
+            const sunIcon = document.getElementById('sunIcon');
+            const visSvgBox = document.getElementById('visSvgBox');
+            
+            const irBg = document.getElementById('irAnimBg');
+            const irGround = document.getElementById('irGround');
+
+            if(isNightMode) {
+                visBg.classList.replace('from-sky-300', 'from-slate-900');
+                visBg.classList.replace('to-sky-100', 'to-slate-800');
+                visBg.classList.replace('border-sky-200', 'border-slate-700');
+                visGround.classList.replace('bg-emerald-700/80', 'bg-slate-800/90');
+                
+                sunIcon.classList.add('opacity-0', 'scale-50');
+                visSvgBox.classList.add('opacity-0');
+                
+                irBg.classList.replace('via-sky-800', 'via-slate-800');
+                irBg.classList.replace('to-sky-200', 'to-slate-700');
+                irBg.classList.replace('border-sky-200', 'border-slate-700');
+                irGround.classList.replace('bg-amber-800', 'bg-slate-800');
+            } else {
+                visBg.classList.replace('from-slate-900', 'from-sky-300');
+                visBg.classList.replace('to-slate-800', 'to-sky-100');
+                visBg.classList.replace('border-slate-700', 'border-sky-200');
+                visGround.classList.replace('bg-slate-800/90', 'bg-emerald-700/80');
+                
+                sunIcon.classList.remove('opacity-0', 'scale-50');
+                visSvgBox.classList.remove('opacity-0');
+                
+                irBg.classList.replace('via-slate-800', 'via-sky-800');
+                irBg.classList.replace('to-slate-700', 'to-sky-200');
+                irBg.classList.replace('border-slate-700', 'border-sky-200');
+                irGround.classList.replace('bg-slate-800', 'bg-amber-800');
+            }
+            
+            updateVisibleSim();
+        });
+
+        // 학생 제출 데이터 구조화 (학번, 이름, 가시, 적외, 레이더 필드 각각 구분 저장)
+        let submissionsData = [
+            { 
+                id: "1", 
+                studentNum: "20101",
+                studentName: "김지수",
+                studentInfo: "20101 김지수", 
+                ansVis: "Q1. 두꺼울수록 밝아짐\nQ2. 밤에는 태양빛 반사가 없음",
+                ansIr: "Q1. 고도가 높을수록 밝음\nQ2. 온도 방출 관측이라 주야간 무관",
+                ansRad: "Q1. 빗방울 많을수록 빨강/보라 에코\nQ2. 반사 입자 없어 어둡게 관측",
+                observation1: "구름 두께, 고도, 강수 입자에 따라 영상별 결과가 크게 다름.", 
+                observation2: "적란운은 세 영상 모두 밝거나 에코가 매우 강함.", 
+                conclusion: "정밀 예보를 위해 여러 관측 영상의 종합 분석이 필수적임.", 
+                timestamp: Date.now() - 100000, 
+                feedback: "" 
+            },
+            { 
+                id: "2", 
+                studentNum: "20102",
+                studentName: "박민호",
+                studentInfo: "20102 박민호", 
+                ansVis: "Q1. 두꺼울수록 반사율 커짐\nQ2. 태양광 부재로 인한 어두움",
+                ansIr: "Q1. 고도 높으면 상공 기온 낮아 하얗게 표시\nQ2. 자체 열 에너지 방출 감지",
+                ansRad: "Q1. 반사 전파 세기 강화\nQ2. 전파 반사체(강수입자) 공백으로 에코 없음",
+                observation1: "반사율, 적외선 방출량, 전파 에코 원리 요약 완료.", 
+                observation2: "권운은 적외 영상에서만 밝게 나타남.", 
+                conclusion: "위성/레이더 자료 융합이 기상 예측의 신뢰성을 높여줌.", 
+                timestamp: Date.now() - 50000, 
+                feedback: "각 영상의 핵심 원리를 명확하게 파악했습니다." 
+            }
+        ];
+
+        document.getElementById('reportForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const studentNum = document.getElementById('studentNum').value.trim();
+            const studentName = document.getElementById('studentName').value.trim();
+            if (!studentNum || !studentName) {
+                showToast('학번과 이름을 모두 입력해 주세요.', 'error');
+                return;
+            }
+
+            const ansVis1 = document.getElementById('ans_vis1')?.value || '';
+            const ansVis2 = document.getElementById('ans_vis2')?.value || '';
+            const ansIr1 = document.getElementById('ans_ir1')?.value || '';
+            const ansIr2 = document.getElementById('ans_ir2')?.value || '';
+            const ansRad1 = document.getElementById('ans_rad1')?.value || '';
+            const ansRad2 = document.getElementById('ans_rad2')?.value || '';
+            const obs1User = document.getElementById('observation1').value || '';
+
+            const ansVis = `Q1. ${ansVis1}\nQ2. ${ansVis2}`;
+            const ansIr = `Q1. ${ansIr1}\nQ2. ${ansIr2}`;
+            const ansRad = `Q1. ${ansRad1}\nQ2. ${ansRad2}`;
+
+            const combinedObs1 = `[가시] ${ansVis1} / ${ansVis2}\n[적외] ${ansIr1} / ${ansIr2}\n[레이더] ${ansRad1} / ${ansRad2}\n\n[원리 요약] ${obs1User}`;
+
+            const reportData = {
+                id: "local-" + Date.now(),
+                studentNum,
+                studentName,
+                studentInfo: `${studentNum} ${studentName}`,
+                ansVis,
+                ansIr,
+                ansRad,
+                observation1: combinedObs1,
+                observation2: document.getElementById('observation2').value,
+                conclusion: document.getElementById('conclusion').value,
+                timestamp: Date.now(),
+                feedback: ""
+            };
+
+            submissionsData.push(reportData);
+
+            if (typeof google !== 'undefined' && google.script && google.script.run) {
+                google.script.run
+                    .withSuccessHandler((res) => {
+                        showToast(`${studentNum} ${studentName} 학생의 보고서가 성공적으로 제출되었습니다.`);
+                    })
+                    .withFailureHandler((err) => {
+                        showToast(`${studentNum} ${studentName} 학생의 보고서가 제출되었습니다.`);
+                    })
+                    .submitReportToSheet(reportData);
+            } else {
+                showToast(`${studentNum} ${studentName} 학생의 보고서가 제출되었습니다.`);
+            }
+
+            document.getElementById('reportForm').reset();
+            renderTeacherDashboard();
+        });
+
+        // 교사 대시보드 및 관리자 모드
+        const loginModal = document.getElementById('loginModal');
+        const pwInput = document.getElementById('adminPassword');
+
+        document.getElementById('toggleTeacherModeBtn').addEventListener('click', () => {
+            loginModal.classList.remove('hidden');
+            setTimeout(() => { loginModal.classList.remove('opacity-0'); loginModal.querySelector('div').classList.remove('scale-95'); }, 10);
+            pwInput.value = ''; pwInput.focus();
+        });
+
+        const closeLoginModal = () => {
+            loginModal.classList.add('opacity-0'); loginModal.querySelector('div').classList.add('scale-95');
+            setTimeout(() => loginModal.classList.add('hidden'), 300);
+        };
+
+        document.getElementById('cancelLoginBtn').addEventListener('click', closeLoginModal);
+        
+        document.getElementById('confirmLoginBtn').addEventListener('click', () => {
+            if (pwInput.value === '0000') {
+                closeLoginModal();
+                document.getElementById('studentView').classList.add('hidden');
+                document.getElementById('teacherView').classList.remove('hidden');
+                renderTeacherDashboard();
+                showToast('관리자 모드로 전환되었습니다.');
+            } else {
+                showToast('비밀번호가 일치하지 않습니다.', 'error');
+            }
+        });
+
+        pwInput.addEventListener('keypress', (e) => { if(e.key === 'Enter') document.getElementById('confirmLoginBtn').click(); });
+
+        document.getElementById('exitTeacherModeBtn').addEventListener('click', () => {
+            document.getElementById('teacherView').classList.add('hidden');
+            document.getElementById('studentView').classList.remove('hidden');
+        });
+
+        function renderTeacherDashboard() {
+            const sorted = [...submissionsData].sort((a, b) => b.timestamp - a.timestamp);
+            const total = 25; const submitted = sorted.length;
+            const pct = Math.min(100, Math.round((submitted / total) * 100));
+
+            document.getElementById('submittedCount').textContent = `${submitted}명`;
+            document.getElementById('progressPercent').textContent = `${pct}%`;
+            document.getElementById('progressBar').style.width = `${pct}%`;
+
+            const tbody = document.getElementById('reportsTableBody');
+            tbody.innerHTML = sorted.map(row => {
+                const dateStr = new Date(row.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                const hasFB = row.feedback && row.feedback.trim() !== "";
+                return `
+                    <tr class="hover:bg-slate-50 border-b border-slate-100">
+                        <td class="px-3 py-3 text-xs text-slate-500">${dateStr}</td>
+                        <td class="px-2 py-3 font-medium text-slate-900 text-xs">${row.studentNum || '-'}</td>
+                        <td class="px-2 py-3 font-medium text-slate-900 text-xs">${row.studentName || '-'}</td>
+                        <td class="px-3 py-3 border-l border-amber-100 bg-amber-50/30"><div class="line-clamp-3 text-xs whitespace-pre-line text-slate-700" title="${row.ansVis || ''}">${row.ansVis || '-'}</div></td>
+                        <td class="px-3 py-3 border-l border-teal-100 bg-teal-50/30"><div class="line-clamp-3 text-xs whitespace-pre-line text-slate-700" title="${row.ansIr || ''}">${row.ansIr || '-'}</div></td>
+                        <td class="px-3 py-3 border-l border-purple-100 bg-purple-50/30"><div class="line-clamp-3 text-xs whitespace-pre-line text-slate-700" title="${row.ansRad || ''}">${row.ansRad || '-'}</div></td>
+                        <td class="px-3 py-3"><div class="line-clamp-2 text-xs" title="${row.observation2}">${row.observation2}</div></td>
+                        <td class="px-3 py-3"><div class="line-clamp-2 text-xs font-bold" title="${row.conclusion}">${row.conclusion}</div></td>
+                        <td class="px-3 py-3 text-center">
+                            <button class="feedback-btn px-2.5 py-1.5 rounded-lg text-xs font-bold shadow-sm ${hasFB ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-600'}" data-id="${row.id}">
+                                ${hasFB ? '피드백 완료' : '피드백 작성'}
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // CSV 다운로드 (학번/이름 및 가시/적외/레이더 답변 열 분리)
+        document.getElementById('downloadCsvBtn').addEventListener('click', () => {
+            let csv = '\uFEFF제출일시,학번,이름,가시영상답변,적외영상답변,레이더영상답변,원리요약,적용분석,최종결론,교사피드백\n';
+            [...submissionsData].sort((a,b)=>b.timestamp-a.timestamp).forEach(r => {
+                const d = new Date(r.timestamp).toLocaleString('ko-KR');
+                csv += [d, r.studentNum || '', r.studentName || '', r.ansVis, r.ansIr, r.ansRad, r.observation1, r.observation2, r.conclusion, r.feedback].map(v=>`"${(v||'').toString().replace(/"/g,'""')}"`).join(',') + '\n';
+            });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8;'}));
+            a.download = `탐구보고서_${new Date().toISOString().slice(0,10)}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        });
+
+        const fbModal = document.getElementById('feedbackModal');
+        let currentTargetId = null;
+
+        document.getElementById('reportsTableBody').addEventListener('click', (e) => {
+            if(e.target.closest('.feedback-btn')) {
+                currentTargetId = e.target.closest('.feedback-btn').getAttribute('data-id');
+                const data = submissionsData.find(d => d.id === currentTargetId);
+                const nameDisplay = `${data.studentNum || ''} ${data.studentName || ''}`.trim() || data.studentInfo;
+                document.getElementById('feedbackStudentName').textContent = nameDisplay;
+                document.getElementById('feedbackVisAns').textContent = data.ansVis || "답변 없음";
+                document.getElementById('feedbackIrAns').textContent = data.ansIr || "답변 없음";
+                document.getElementById('feedbackRadAns').textContent = data.ansRad || "답변 없음";
+                document.getElementById('feedbackStudentSummary').textContent = data.observation1 || "내용 없음";
+                document.getElementById('feedbackStudentConclusion').textContent = data.conclusion || "내용 없음";
+                document.getElementById('teacherFeedbackText').value = data.feedback || "";
+                
+                fbModal.classList.remove('hidden');
+                setTimeout(()=> { fbModal.classList.remove('opacity-0'); fbModal.querySelector('div').classList.remove('scale-95'); }, 10);
+            }
+        });
+
+        const closeFb = () => {
+            fbModal.classList.add('opacity-0'); fbModal.querySelector('div').classList.add('scale-95');
+            setTimeout(()=> fbModal.classList.add('hidden'), 300);
+        };
+        document.getElementById('cancelFeedbackBtn').addEventListener('click', closeFb);
+
+        document.getElementById('generateAiBtn').addEventListener('click', () => {
+            const data = submissionsData.find(d => d.id === currentTargetId);
+            const nameDisplay = `${data.studentNum || ''} ${data.studentName || ''}`.trim() || data.studentInfo;
+            const btn = document.getElementById('generateAiBtn');
+            btn.innerHTML = '생성 중...'; btn.disabled = true;
+            setTimeout(() => {
+                document.getElementById('teacherFeedbackText').value = `[AI 추천 초안] ${nameDisplay} 학생, 가시·적외·레이더 영상의 각각의 탐구 질문에 구체적이고 논리적인 근거로 답변을 완성했습니다. 영상별 물리적 관측 차이를 명확히 파악하고 있어 우수합니다.`;
+                showToast('AI 피드백이 생성되었습니다.');
+                btn.innerHTML = 'AI 피드백 자동 생성'; btn.disabled = false;
+            }, 1000);
+        });
+
+        document.getElementById('saveFeedbackBtn').addEventListener('click', () => {
+            const fb = document.getElementById('teacherFeedbackText').value.trim();
+            const idx = submissionsData.findIndex(d => d.id === currentTargetId);
+            if (idx > -1) { submissionsData[idx].feedback = fb; renderTeacherDashboard(); }
+            showToast('피드백이 저장되었습니다.'); closeFb();
+        });
+
+        function toggleAnalysisAns(id) {
+            const el = document.getElementById(id);
+            if (el) el.classList.toggle('hidden');
+        }
+    </script>
+</body>
+</html>
